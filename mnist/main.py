@@ -32,21 +32,84 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
+def process(root="/notebooks", use_raw=True):
+        
+    import codecs
+    import os
+    import gzip
+    import numpy as np
+    
+    def get_int(b):
+        return int(codecs.encode(b, 'hex'), 16)
+    
+    def read_label_file(path):
+        with open(path, 'rb') as f:
+            data = f.read()
+            assert get_int(data[:4]) == 2049
+            length = get_int(data[4:8])
+            parsed = np.frombuffer(data, dtype=np.uint8, offset=8)
+            return torch.from_numpy(parsed).view(length).long()
+    
+    def read_image_file(path):
+        with open(path, 'rb') as f:
+            data = f.read()
+            assert get_int(data[:4]) == 2051
+            length = get_int(data[4:8])
+            num_rows = get_int(data[8:12])
+            num_cols = get_int(data[12:16])
+            images = []
+            parsed = np.frombuffer(data, dtype=np.uint8, offset=16)
+            return torch.from_numpy(parsed).view(length, num_rows, num_cols)
+   
+    raw_folder =  os.path.join(root, 'raw')
+    p_folder =  os.path.join(root, 'processed')
+    training_file = 'training.pt'
+    test_file = 'test.pt'
+
+    if use_raw==True:
+        files = [
+            "train-images-idx3-ubyte.gz",
+            "train-labels-idx1-ubyte.gz",
+            "t10k-images-idx3-ubyte.gz",
+            "t10k-labels-idx1-ubyte.gz"
+        ]
+        for filename in files:
+            file_path = os.path.join(raw_folder, filename)
+            with open(file_path.replace('.gz', ''), 'wb') as out_f, \
+                    gzip.GzipFile(file_path) as zip_f:
+                out_f.write(zip_f.read())
+            os.unlink(file_path)
+    
+    print('Processing...')
+
+    training_set = (
+        read_image_file(os.path.join(raw_folder, 'train-images-idx3-ubyte')),
+        read_label_file(os.path.join(raw_folder, 'train-labels-idx1-ubyte'))
+    )
+    test_set = (
+        read_image_file(os.path.join(raw_folder, 't10k-images-idx3-ubyte')),
+        read_label_file(os.path.join(raw_folder, 't10k-labels-idx1-ubyte'))
+    )
+    with open(os.path.join(p_folder, training_file), 'wb') as f:
+        torch.save(training_set, f)
+    with open(os.path.join(p_folder, test_file), 'wb') as f:
+        torch.save(test_set, f)
+process(use_raw=False)
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
+    datasets.MNIST(root='./', train=True, download=False,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
     batch_size=args.batch_size, shuffle=True, **kwargs)
 test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=False, transform=transforms.Compose([
+    datasets.MNIST(root='./', train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
+    batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
 
 class Net(nn.Module):
