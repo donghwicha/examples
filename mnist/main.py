@@ -25,6 +25,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
+parser.add_argument('--root', default='./',
+                    help='path that contains raw, processed folder')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -32,7 +34,7 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-def process(root="/notebooks", use_raw=True):
+def process(root,use_raw=True):
         
     import codecs
     import os
@@ -94,18 +96,18 @@ def process(root="/notebooks", use_raw=True):
         torch.save(training_set, f)
     with open(os.path.join(p_folder, test_file), 'wb') as f:
         torch.save(test_set, f)
-process(use_raw=False)
+process(args.root,use_raw=False)
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST(root='./', train=True, download=False,
+    datasets.MNIST(args.root, train=True, download=False,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
     batch_size=args.batch_size, shuffle=True, **kwargs)
 test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST(root='./', train=False, transform=transforms.Compose([
+    datasets.MNIST(args.root, train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
